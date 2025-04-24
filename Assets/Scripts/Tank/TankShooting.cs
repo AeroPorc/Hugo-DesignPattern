@@ -1,6 +1,11 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq.Expressions;
+using System.Threading;
+using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -54,6 +59,9 @@ namespace Tanks.Complete
         Coroutine _charging;
         bool _canFire;
 
+        private bool _isCharging = false; // Tracks if charging is active
+        
+
         
         private void OnEnable()
         {
@@ -73,6 +81,8 @@ namespace Tanks.Complete
             m_InputUser = GetComponent<TankInputUser>();
             if (m_InputUser == null)
                 m_InputUser = gameObject.AddComponent<TankInputUser>();
+            
+            _cancel = new CancellationTokenSource();
         }
 
         private void Start ()
@@ -110,10 +120,11 @@ namespace Tanks.Complete
         /// <summary>
         /// Used by AI to start charging
         /// </summary>
-        public void StartCharging()
+        public async UniTaskVoid StartCharging()
         {
             if (_canFire == false) return;
             
+            _isCharging = true;
             m_IsCharging = true;
             // ... reset the fired flag and reset the launch force.
             m_Fired = false;
@@ -122,56 +133,70 @@ namespace Tanks.Complete
             // Change the clip to the charging clip and start it playing.
             m_ShootingAudio.clip = m_ChargingClip;
             m_ShootingAudio.Play ();
+            
+            // The slider should have a default value of the minimum launch force.
+            m_AimSlider.value = m_BaseMinLaunchForce;
 
-            _charging = StartCoroutine(ChargingRoutine());
-            IEnumerator ChargingRoutine()
+            try
             {
-                // The slider should have a default value of the minimum launch force.
-                m_AimSlider.value = m_BaseMinLaunchForce;
-                m_Fired = false;
-                m_CurrentLaunchForce = m_MinLaunchForce;
-                
                 while (true)
                 {
                     // Increment the launch force and update the slider.
                     m_CurrentLaunchForce += m_ChargeSpeed * Time.deltaTime;
                     m_AimSlider.value = m_CurrentLaunchForce;
-                    
+                        
                     // If the max force has been exceeded and the shell hasn't yet been launched...
                     if (m_CurrentLaunchForce >= m_MaxLaunchForce && !m_Fired)
                     {
                         // ... use the max force and launch the shell.
                         m_CurrentLaunchForce = m_MaxLaunchForce;
                         StopCharging();
-                        yield break;
+                        return;
                     }
-                    
+
+                    await UniTask.NextFrame(_cancel.Token);
+                        
                 }
-                yield break;
             }
+                catch (Exception e)
+                {
+                   Debug.LogError($"Error during Charging {e.Message}");
+                }
             
         }
 
-        public void StopCharging()
+        public async UniTaskVoid StopCharging()
         {
-            if (_charging != null)
-            {
-                StopCoroutine(_charging);
-                _charging = null;
-                Fire();
-                m_ShotCooldownTimer = 1f;
-                
-                IEnumerator Cooldown()
-                {
-                    _canFire = false;
-                    yield return new WaitForSeconds(m_ShotCooldownTimer);
-                    _canFire = true;
-                }
-                
-                // The slider should have a default value of the minimum launch force.
-                m_AimSlider.value = m_BaseMinLaunchForce;
-            }
+            if (!_isCharging) return;
+            
+
+            // Fire the shell
+            Fire();
+
+            _isCharging = false;
+            m_IsCharging = false;
+
+            // Start cooldown
+            _canFire = false;
+            await UniTask.Delay(TimeSpan.FromSeconds(m_ShotCooldown));
+            _canFire = true;
+
+            // Reset the aim slider
+            m_AimSlider.value = m_BaseMinLaunchForce;
         }
+
+       CancellationTokenSource _cancel;
+
+       public void CancelCharging()
+       {
+            if (_isCharging)
+            {
+                _cancel.Cancel();
+                _isCharging = false;
+                m_IsCharging = false;
+            }
+       }
+
         
         void ComputerUpdate()
         {
