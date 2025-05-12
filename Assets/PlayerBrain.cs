@@ -9,7 +9,7 @@ public class PlayerBrain : MonoBehaviour
     [SerializeField] TankShooting _shooting;
 
     InputAction _fireAction;
-    InputAction _cancelAction;
+    InputAction _cancelFireAction;
     TankInputUser m_InputUser;
     
     void Start()
@@ -17,32 +17,35 @@ public class PlayerBrain : MonoBehaviour
         // On récupère la manette
         m_InputUser = GetComponent<TankInputUser>();
         _fireAction = m_InputUser.ActionAsset.FindAction("Fire");
-        _cancelAction = m_InputUser.ActionAsset.FindAction("Cancel");
+        _cancelFireAction = m_InputUser.ActionAsset.FindAction("Cancel");
         
         // input
         _fireAction.started += StartShoot;
         _fireAction.canceled += StopShoot;
-        _cancelAction.performed += CancelShoot;
+        
+        _cancelFireAction.started += AskForCancel;
     }
 
     void OnDestroy()
     {
         _fireAction.started -= StartShoot;
         _fireAction.canceled -= StopShoot;
-        _cancelAction.performed -= CancelShoot;
+        _cancelFireAction.started -= AskForCancel;
     }
-
+    
+    
+    void AskForCancel(InputAction.CallbackContext obj)
+    {
+        Debug.Log("cancel");
+        _shooting.CancelFire();
+    }
     void StopShoot(InputAction.CallbackContext obj)
     {
-        _shooting.StartCharging();
+        _shooting.StopCharging();
     }
 
     void StartShoot(InputAction.CallbackContext obj)
     {
-        _shooting.StopCharging();
-    }
-    void CancelShoot(InputAction.CallbackContext obj)
-    {
-        _shooting.CancelCharging();
+        _shooting.StartCharging();
     }
 }

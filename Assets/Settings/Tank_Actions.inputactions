@@ -44,7 +44,7 @@
                 {
                     "name": "Cancel",
                     "type": "Button",
-                    "id": "e4bd96fb-db00-4e1d-a27b-320244e67e59",
+                    "id": "de877b7a-e6ed-4d57-8535-42685a6de27d",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
@@ -263,22 +263,11 @@
                 },
                 {
                     "name": "",
-                    "id": "2cdf707b-94b4-4a91-83a7-ddb0ce288ee0",
-                    "path": "<Keyboard>/o",
+                    "id": "0cf51e8d-8185-4719-aa7d-ce2cdab273e4",
+                    "path": "<Keyboard>/c",
                     "interactions": "",
                     "processors": "",
-                    "groups": ";KeyboardLeft",
-                    "action": "Cancel",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "191cf435-786b-4852-b066-f55783aaa3a2",
-                    "path": "<Keyboard>/rightShift",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": ";KeyboardRight",
+                    "groups": "",
                     "action": "Cancel",
                     "isComposite": false,
                     "isPartOfComposite": false

@@ -1,17 +1,39 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq.Expressions;
+using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Tanks.Complete
 {
+
+    public static class TransformExtension
+    {
+        public static void DestroyAllChildren(this Transform t)
+        {
+            foreach (Transform el in t)
+            {
+                GameObject.Destroy(el.gameObject);
+            }
+        }
+
+        public static IEnumerable<T> MyWhere<T>(this IEnumerable<T> @this, Func<T, bool> predicate)
+        {
+            foreach (T el in @this)
+            {
+                var canSend = predicate(el);
+                if (canSend) yield return el;
+            }
+        }
+        
+        
+    }
+    
+    
     public class TankShooting : MonoBehaviour
     {
         public Rigidbody m_Shell;                   // Prefab of the shell.
@@ -56,13 +78,31 @@ namespace Tanks.Complete
         private float m_BaseMinLaunchForce;         // The initial value of m_MinLaunchForce
         private float m_ShotCooldownTimer;          // The timer counting down before a shot is allowed again
     
-        Coroutine _charging;
         bool _canFire;
 
-        private bool _isCharging = false; // Tracks if charging is active
-        
 
         
+        [ContextMenu("LINQ")]
+        void coucou()
+        {
+
+            List<int> ages = new List<int>() { 2, 4, 89, 45, 30 };
+            foreach (var VARIABLE in ages.MyWhere(i => i <= 30))
+            {
+                Debug.Log(VARIABLE);
+            }
+
+
+            //DestroyAllChildren(transform);
+
+            //TransformExtension.DestroyAllChildren(transform);
+            //transform.DestroyAllChildren();
+
+
+
+        }
+
+
         private void OnEnable()
         {
             // When the tank is turned on, reset the launch force, the UI and the power ups
@@ -75,13 +115,15 @@ namespace Tanks.Complete
             m_AimSlider.minValue = m_MinLaunchForce;
             m_AimSlider.maxValue = m_MaxLaunchForce;
         }
+        CancellationTokenSource _cancel;
 
         private void Awake()
         {
             m_InputUser = GetComponent<TankInputUser>();
             if (m_InputUser == null)
                 m_InputUser = gameObject.AddComponent<TankInputUser>();
-            
+
+
             _cancel = new CancellationTokenSource();
         }
 
@@ -97,107 +139,84 @@ namespace Tanks.Complete
             // The rate that the launch force charges up is the range of possible forces by the max charge time.
             m_ChargeSpeed = (m_MaxLaunchForce - m_MinLaunchForce) / m_MaxChargeTime;
         }
-
-        private void Update ()
-        {
-            return;
-            // Computer and Human control Tank use 2 different update functions 
-            if (!m_IsComputerControlled)
-            {
-                HumanUpdate();
-            }
-            else
-            {
-                ComputerUpdate();
-            }
-        }
-
-        void LateUpdate()
-        {
-            throw new NotImplementedException();
-        }
-
+        
         /// <summary>
         /// Used by AI to start charging
         /// </summary>
         public async UniTaskVoid StartCharging()
         {
             if (_canFire == false) return;
-            
-            _isCharging = true;
-            m_IsCharging = true;
-            // ... reset the fired flag and reset the launch force.
-            m_Fired = false;
-            m_CurrentLaunchForce = m_MinLaunchForce;
-
-            // Change the clip to the charging clip and start it playing.
-            m_ShootingAudio.clip = m_ChargingClip;
-            m_ShootingAudio.Play ();
+            if (m_IsCharging) return;
             
             // The slider should have a default value of the minimum launch force.
+            m_IsCharging = true;
+            m_Fired = false;
             m_AimSlider.value = m_BaseMinLaunchForce;
-
-            try
+            m_CurrentLaunchForce = m_MinLaunchForce;
+            
+            while (true)
             {
-                while (true)
+                // Increment the launch force and update the slider.
+                m_CurrentLaunchForce += m_ChargeSpeed * Time.deltaTime;
+                m_AimSlider.value = m_CurrentLaunchForce;
+                
+                // If the max force has been exceeded and the shell hasn't yet been launched...
+                if (m_CurrentLaunchForce >= m_MaxLaunchForce && !m_Fired)
                 {
-                    // Increment the launch force and update the slider.
-                    m_CurrentLaunchForce += m_ChargeSpeed * Time.deltaTime;
-                    m_AimSlider.value = m_CurrentLaunchForce;
-                        
-                    // If the max force has been exceeded and the shell hasn't yet been launched...
-                    if (m_CurrentLaunchForce >= m_MaxLaunchForce && !m_Fired)
-                    {
-                        // ... use the max force and launch the shell.
-                        m_CurrentLaunchForce = m_MaxLaunchForce;
-                        StopCharging();
-                        return;
-                    }
+                    // ... use the max force and launch the shell.
+                    m_CurrentLaunchForce = m_MaxLaunchForce;
+                    StopCharging();
+                    return;
+                }
 
-                    await UniTask.NextFrame(_cancel.Token);
-                        
-                }
+                await UniTask.NextFrame();
             }
-                catch (Exception e)
-                {
-                   Debug.LogError($"Error during Charging {e.Message}");
-                }
             
         }
 
         public async UniTaskVoid StopCharging()
         {
-            if (!_isCharging) return;
+            if (m_IsCharging == false) return ;
             
-
-            // Fire the shell
             Fire();
-
-            _isCharging = false;
             m_IsCharging = false;
-
-            // Start cooldown
-            _canFire = false;
-            await UniTask.Delay(TimeSpan.FromSeconds(m_ShotCooldown));
-            _canFire = true;
-
-            // Reset the aim slider
+            m_ShotCooldownTimer = 1f;
+            // The slider should have a default value of the minimum launch force.
             m_AimSlider.value = m_BaseMinLaunchForce;
-        }
-
-       CancellationTokenSource _cancel;
-
-       public void CancelCharging()
-       {
-            if (_isCharging)
+            
+            _canFire = false;
+            
+            //gameObject.GetCancellationTokenOnDestroy()
+            
+            bool hasBeenCancelled = await UniTask.Delay(10000, DelayType.DeltaTime, cancellationToken: _cancel.Token)
+                .SuppressCancellationThrow();
+            if (hasBeenCancelled)
             {
-                _cancel.Cancel();
-                _isCharging = false;
-                m_IsCharging = false;
+                _canFire = true;
             }
-       }
-
+            
+            //try
+            //{
+            //    await UniTask.Delay(10000, DelayType.DeltaTime, cancellationToken: _cancel.Token);
+            //}
+            //catch (Exception ec)
+            //{
+            //    Debug.Log("Cancelled");
+            //}
+            //finally
+            //{
+            //    _canFire = true;
+            //}
+        }
         
+        [ContextMenu("Cancel")]
+        public void CancelFire()
+        {
+            if (_canFire == true) return;
+            
+            _cancel.Cancel();
+            _cancel = new CancellationTokenSource();
+        }
         void ComputerUpdate()
         {
             // The slider should have a default value of the minimum launch force.
@@ -231,7 +250,7 @@ namespace Tanks.Complete
         {
             
         }
-
+        
         private void Fire ()
         {
             // Set the fired flag so only Fire is only called once.
@@ -316,5 +335,7 @@ namespace Tanks.Complete
 
             return position;
         }
+
+        
     }
 }
